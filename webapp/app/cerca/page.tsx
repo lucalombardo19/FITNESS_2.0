@@ -15,8 +15,12 @@ export default function Cerca() {
   const [error, setError] = useState('');
   const [selected, setSelected] = useState<NutritionResult | null>(null);
   const [apiKey, setApiKey] = useState('');
+  const [usdaKey, setUsdaKey] = useState('');
 
-  useEffect(() => { setApiKey(localStorage.getItem('fitness_api_key') ?? ''); }, []);
+  useEffect(() => {
+    setApiKey(localStorage.getItem('fitness_api_key') ?? '');
+    setUsdaKey(localStorage.getItem('fitness_usda_key') ?? '');
+  }, []);
 
   const search = async (query = q) => {
     if (!query.trim()) return;
@@ -25,7 +29,7 @@ export default function Cerca() {
       const res = await fetch('/api/cerca', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: query.trim(), dietary, limit: 12, apiKey }),
+        body: JSON.stringify({ query: query.trim(), dietary, limit: 12, apiKey, usdaKey }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
