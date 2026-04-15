@@ -55,7 +55,13 @@ export async function POST(req: NextRequest) {
 
     const plan = { status: 'success', summary, meal_plan: mealPlan, workout_plan: workoutPlan, execution_steps: steps, errors: [], timestamp: new Date().toISOString() };
 
-    db.prepare('UPDATE user_data SET last_plan = ?, updated_at = datetime("now") WHERE user_id = ?').run(JSON.stringify(plan), uid);
+    db.prepare(`
+      INSERT INTO user_data (user_id, last_plan, updated_at)
+      VALUES (?, ?, datetime('now'))
+      ON CONFLICT(user_id) DO UPDATE SET
+        last_plan  = excluded.last_plan,
+        updated_at = excluded.updated_at
+    `).run(uid, JSON.stringify(plan));
 
     return NextResponse.json(plan);
   } catch (e: unknown) {
