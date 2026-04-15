@@ -27,6 +27,16 @@ db.exec(`
     updated_at          TEXT DEFAULT (datetime('now')),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS weight_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    weight_kg  REAL    NOT NULL,
+    date       TEXT    NOT NULL,
+    notes      TEXT,
+    created_at TEXT    DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
 
 // Migrate existing tables: add Yazio columns if missing

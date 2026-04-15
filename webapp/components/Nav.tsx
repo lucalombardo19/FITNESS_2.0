@@ -7,6 +7,15 @@ const links = [
   { href: '/',             label: 'Home',         icon: '🏠' },
   { href: '/profilo',      label: 'Profilo',      icon: '👤' },
   { href: '/piano',        label: 'Piano AI',     icon: '⚡' },
+  { href: '/progressi',    label: 'Progressi',    icon: '📈' },
+  { href: '/impostazioni', label: 'Settings',     icon: '⚙️' },
+];
+
+const sideLinks = [
+  { href: '/',             label: 'Home',         icon: '🏠' },
+  { href: '/profilo',      label: 'Profilo',      icon: '👤' },
+  { href: '/piano',        label: 'Piano AI',     icon: '⚡' },
+  { href: '/progressi',    label: 'Progressi',    icon: '📈' },
   { href: '/cerca',        label: 'Cerca',        icon: '🔍' },
   { href: '/impostazioni', label: 'Impostazioni', icon: '⚙️' },
 ];
@@ -25,7 +34,7 @@ export default function Nav() {
         </div>
 
         <nav className="flex flex-col gap-1 flex-1">
-          {links.map(({ href, label, icon }) => (
+          {sideLinks.map(({ href, label, icon }) => (
             <Link key={href} href={href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                 path === href ? 'bg-primary/20 text-primary' : 'text-sub hover:bg-surfaceB hover:text-white'

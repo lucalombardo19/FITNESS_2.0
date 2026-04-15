@@ -19,7 +19,7 @@ const ACTIVITY = [
 const EQUIPMENT = { bodyweight:'A corpo libero', dumbbells:'Manubri', barbell:'Bilanciere', resistance_bands:'Elastici', pull_up_bar:'Sbarra', gym_access:'Palestra' };
 const DIETARY   = { vegetarian:'Vegetariano', vegan:'Vegano', keto:'Keto', paleo:'Paleo', mediterranean:'Mediterranea', low_carb:'Low Carb' };
 const ALLERGIES = { dairy:'Latticini', gluten:'Glutine', nuts:'Frutta secca', shellfish:'Crostacei', eggs:'Uova', soy:'Soia' };
-const DEFAULT: UserProfile = { age:25, weight_kg:75, height_cm:175, activity_level:'moderately_active', fitness_goal:'maintenance', weekly_workout_frequency:3, allergies:[], dietary_preferences:[], available_equipment:['bodyweight'] };
+const DEFAULT: UserProfile = { age:25, weight_kg:75, height_cm:175, goal_weight_kg:undefined, activity_level:'moderately_active', fitness_goal:'maintenance', weekly_workout_frequency:3, allergies:[], dietary_preferences:[], available_equipment:['bodyweight'] };
 
 export default function Profilo() {
   const [p, setP] = useState<UserProfile>(DEFAULT);
@@ -67,6 +67,12 @@ export default function Profilo() {
                 onChange={e => update(key as keyof UserProfile, parseFloat(e.target.value) as UserProfile[keyof UserProfile])} />
             </div>
           ))}
+        </div>
+        <div className="mt-3">
+          <label className="label">Peso obiettivo (kg) — opzionale</label>
+          <input type="number" step="0.5" min="30" max="300" className="input" placeholder="es. 70"
+            value={p.goal_weight_kg ?? ''} onChange={e => update('goal_weight_kg', e.target.value ? parseFloat(e.target.value) : undefined as unknown as number)} />
+          <p className="text-muted text-xs mt-1">Usato nella pagina Progressi per mostrare la distanza dall'obiettivo</p>
         </div>
       </div>
 

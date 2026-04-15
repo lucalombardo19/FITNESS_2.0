@@ -5,6 +5,7 @@ export interface UserProfile {
   age: number;
   weight_kg: number;
   height_cm: number;
+  goal_weight_kg?: number;
   activity_level: ActivityLevel;
   fitness_goal: FitnessGoal;
   weekly_workout_frequency: number;
