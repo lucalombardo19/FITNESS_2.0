@@ -5,6 +5,7 @@ import { GradientCard } from '../components/GradientCard';
 import { SectionHeader } from '../components/SectionHeader';
 import { MacroBar } from '../components/MacroBar';
 import fitnessAPI from '../services/api';
+import { generatePlanWithClaude } from '../services/claudeService';
 import { LangGraphFitnessResponse, UserProfile, MealPlan, WorkoutPlan, Meal, WorkoutSession } from '../types';
 
 type Tab = 'overview' | 'meals' | 'workout';
@@ -16,6 +17,7 @@ export const PlanScreen: React.FC = () => {
   const [genMeal, setGenMeal] = useState(true);
   const [genWorkout, setGenWorkout] = useState(true);
   const [useO3, setUseO3] = useState(false);
+  const [anthropicKey, setAnthropicKey] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('overview');
   const [steps, setSteps] = useState<string[]>([]);
   const [genError, setGenError] = useState<string | null>(null);
@@ -30,22 +32,41 @@ export const PlanScreen: React.FC = () => {
   }, [loading, spinAnim]);
 
   const loadData = async () => {
-    const [p, pl] = await Promise.all([fitnessAPI.loadProfile(), fitnessAPI.loadLastPlan()]);
+    const [p, pl, settings] = await Promise.all([fitnessAPI.loadProfile(), fitnessAPI.loadLastPlan(), fitnessAPI.loadSettings2()]);
     setProfile(p);
     if (pl) setPlan(pl);
+    setAnthropicKey(settings.anthropicApiKey ?? null);
   };
 
   const handleGenerate = async () => {
     if (!profile) { Alert.alert('Profilo mancante', 'Configura prima il tuo profilo.'); return; }
     setLoading(true); setSteps([]); setPlan(null); setGenError(null);
-    const mockSteps = ['\ud83e\udd16 Avvio workflow LangGraph...', '\ud83d\udc64 Profile Manager: analisi obiettivi...', genMeal ? '\ud83e\udd57 Meal Planner: ricerca alimenti USDA...' : null, genWorkout ? '\ud83c\udfcb\ufe0f Workout Planner: progettazione routine...' : null, '\ud83d\udccb Plan Coordinator: sincronizzazione...', '\ud83d\udcdd Summary Agent: finalizzazione piano...'].filter(Boolean) as string[];
-    let stepIdx = 0;
-    const interval = setInterval(() => { if (stepIdx < mockSteps.length) { setSteps((prev) => [...prev, mockSteps[stepIdx]]); stepIdx++; } }, 3500);
+
+    const addStep = (s: string) => setSteps((prev) => [...prev, s]);
+
     try {
-      const result = await fitnessAPI.generateFitnessPlan({ user_id: profile.user_id, user_profile: profile, generate_meal_plan: genMeal, generate_workout_plan: genWorkout, use_o3_mini: useO3, use_full_database: false, meal_preferences: { dietary_preferences: profile.dietary_preferences, allergies: profile.allergies }, workout_preferences: { available_equipment: profile.available_equipment, weekly_frequency: profile.weekly_workout_frequency } });
-      clearInterval(interval); setPlan(result); await fitnessAPI.saveLastPlan(result); setSteps([]);
+      let result: LangGraphFitnessResponse;
+
+      if (anthropicKey) {
+        // Use Claude API directly
+        addStep('\ud83e\udd16 Connessione a Claude AI...');
+        addStep('\ud83d\udc64 Analisi profilo e obiettivi...');
+        if (genMeal) addStep('\ud83e\udd57 Pianificazione dieta personalizzata...');
+        if (genWorkout) addStep('\ud83c\udfcb\ufe0f Progettazione routine di allenamento...');
+        result = await generatePlanWithClaude(anthropicKey, profile, genMeal, genWorkout, addStep);
+      } else {
+        // Fallback: LangGraph backend
+        const mockSteps = ['\ud83e\udd16 Avvio workflow LangGraph...', '\ud83d\udc64 Profile Manager: analisi obiettivi...', genMeal ? '\ud83e\udd57 Meal Planner: ricerca alimenti USDA...' : null, genWorkout ? '\ud83c\udfcb\ufe0f Workout Planner: progettazione routine...' : null, '\ud83d\udccb Plan Coordinator: sincronizzazione...', '\ud83d\udcdd Summary Agent: finalizzazione piano...'].filter(Boolean) as string[];
+        let stepIdx = 0;
+        const interval = setInterval(() => { if (stepIdx < mockSteps.length) { addStep(mockSteps[stepIdx]); stepIdx++; } }, 3500);
+        try {
+          result = await fitnessAPI.generateFitnessPlan({ user_id: profile.user_id, user_profile: profile, generate_meal_plan: genMeal, generate_workout_plan: genWorkout, use_o3_mini: useO3, use_full_database: false, meal_preferences: { dietary_preferences: profile.dietary_preferences, allergies: profile.allergies }, workout_preferences: { available_equipment: profile.available_equipment, weekly_frequency: profile.weekly_workout_frequency } });
+          clearInterval(interval);
+        } catch (e) { clearInterval(interval); throw e; }
+      }
+
+      setPlan(result); await fitnessAPI.saveLastPlan(result); setSteps([]);
     } catch (e: unknown) {
-      clearInterval(interval);
       const err = e as { message?: string };
       setGenError(err?.message ?? 'Errore sconosciuto'); setSteps([]);
     } finally { setLoading(false); }
@@ -67,7 +88,7 @@ export const PlanScreen: React.FC = () => {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <GradientCard variant="primary" style={styles.card}>
-          <SectionHeader title="Genera Piano AI" icon="\u26a1" subtitle="Powered by LangGraph + GPT-4" />
+          <SectionHeader title="Genera Piano AI" icon="\u26a1" subtitle={anthropicKey ? 'Powered by Claude (Anthropic)' : 'Powered by LangGraph + GPT-4'} />
           {[{ label: 'Piano alimentare', val: genMeal, set: setGenMeal }, { label: 'Piano allenamento', val: genWorkout, set: setGenWorkout }, { label: 'Usa GPT-o3-mini (pi\u00f9 preciso)', val: useO3, set: setUseO3 }].map((o) => (
             <View key={o.label} style={styles.optRow}>
               <Text style={styles.optLabel}>{o.label}</Text>
@@ -92,13 +113,20 @@ export const PlanScreen: React.FC = () => {
           <GradientCard variant="danger" style={styles.card}>
             <SectionHeader title="Errore generazione" icon="\ud83d\udea8" />
             <Text style={styles.errorBody}>{genError}</Text>
-            {(genError.includes('API key') || genError.includes('timeout') || genError.includes('stream')) && (
+            {!anthropicKey && (genError.includes('API key') || genError.includes('timeout') || genError.includes('stream')) && (
               <View style={styles.errorSteps}>
-                <Text style={styles.errorStepTitle}>Passi per risolvere:</Text>
-                <Text style={styles.errorStep}>1. Apri <Text style={styles.code}>.env</Text> nel backend</Text>
-                <Text style={styles.errorStep}>2. Imposta <Text style={styles.code}>OPENAI_API_KEY=sk-...</Text></Text>
-                <Text style={styles.errorStep}>3. Riavvia: <Text style={styles.code}>make setup-demo</Text></Text>
-                {useO3 && <Text style={styles.errorStep}>4. Oppure disattiva <Text style={styles.code}>GPT-o3-mini</Text> qui sopra</Text>}
+                <Text style={styles.errorStepTitle}>Soluzione rapida — usa Claude:</Text>
+                <Text style={styles.errorStep}>1. Vai su <Text style={styles.code}>Impostazioni</Text></Text>
+                <Text style={styles.errorStep}>2. Inserisci la tua <Text style={styles.code}>Anthropic API Key</Text></Text>
+                <Text style={styles.errorStep}>3. Salva e riprova — niente backend!</Text>
+              </View>
+            )}
+            {anthropicKey && (
+              <View style={styles.errorSteps}>
+                <Text style={styles.errorStepTitle}>Possibili cause:</Text>
+                <Text style={styles.errorStep}>\u2022 API key non valida o scaduta</Text>
+                <Text style={styles.errorStep}>\u2022 Credito Anthropic esaurito</Text>
+                <Text style={styles.errorStep}>\u2022 Connessione internet assente</Text>
               </View>
             )}
             <TouchableOpacity style={styles.retryBtn} onPress={() => { setGenError(null); handleGenerate(); }}>

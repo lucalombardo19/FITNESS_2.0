@@ -16,6 +16,8 @@ const SETUP_STEPS = [
 export const SettingsScreen: React.FC = () => {
   const [apiUrl, setApiUrl] = useState(DEFAULT_API_URL);
   const [userId, setUserId] = useState(DEFAULT_USER_ID);
+  const [anthropicKey, setAnthropicKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [connStatus, setConnStatus] = useState<'idle'|'ok'|'error'>('idle');
   const [connMsg, setConnMsg] = useState('');
@@ -24,7 +26,7 @@ export const SettingsScreen: React.FC = () => {
 
   useEffect(() => { loadSettings(); }, []);
 
-  const loadSettings = async () => { const s = await fitnessAPI.loadSettings2(); setApiUrl(s.apiBaseUrl); setUserId(s.userId); };
+  const loadSettings = async () => { const s = await fitnessAPI.loadSettings2(); setApiUrl(s.apiBaseUrl); setUserId(s.userId); setAnthropicKey(s.anthropicApiKey ?? ''); };
 
   const handleTest = async () => {
     setTesting(true); setConnStatus('idle'); fitnessAPI.setBaseUrl(apiUrl);
@@ -33,7 +35,7 @@ export const SettingsScreen: React.FC = () => {
     if (r.ok) { try { setDbStatus(await fitnessAPI.getDatabaseAvailability()); } catch { /* ignore */ } }
   };
 
-  const handleSave = async () => { await fitnessAPI.saveSettings({ apiBaseUrl: apiUrl, userId }); setSaved(true); setTimeout(() => setSaved(false), 2000); };
+  const handleSave = async () => { await fitnessAPI.saveSettings({ apiBaseUrl: apiUrl, userId, anthropicApiKey: anthropicKey.trim() || undefined }); setSaved(true); setTimeout(() => setSaved(false), 2000); };
 
   const handleClearData = () => Alert.alert('Cancella dati', 'Cancellare profilo e piani salvati?', [
     { text: 'Annulla', style: 'cancel' },
@@ -67,8 +69,33 @@ export const SettingsScreen: React.FC = () => {
         </GradientCard>
       )}
 
+      <GradientCard variant="accent" style={styles.card}>
+        <SectionHeader title="Claude AI (consigliato)" icon="\ud83e\udd16" subtitle="Genera piani direttamente con Claude, senza backend" />
+        <Text style={styles.label}>Anthropic API Key</Text>
+        <View style={styles.keyRow}>
+          <TextInput
+            style={[styles.input, styles.keyInput]}
+            value={anthropicKey}
+            onChangeText={setAnthropicKey}
+            placeholder="sk-ant-api03-..."
+            placeholderTextColor={COLORS.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry={!showKey}
+          />
+          <TouchableOpacity style={styles.eyeBtn} onPress={() => setShowKey(!showKey)}>
+            <Text style={styles.eyeIcon}>{showKey ? '\ud83d\ude48' : '\ud83d\udc40'}</Text>
+          </TouchableOpacity>
+        </View>
+        {anthropicKey ? (
+          <Text style={styles.keyOk}>\u2713 API Key configurata \u2014 usa la schermata Piano per generare</Text>
+        ) : (
+          <Text style={styles.hint}>Ottieni la tua key su console.anthropic.com</Text>
+        )}
+      </GradientCard>
+
       <GradientCard style={styles.card}>
-        <SectionHeader title="Come avviare il backend" icon="\ud83d\udcd6" />
+        <SectionHeader title="Backend FastAPI (opzionale)" icon="\ud83d\udcd6" subtitle="Solo se vuoi la ricerca semantica FAISS" />
         {SETUP_STEPS.map((step, i) => (
           <View key={i} style={styles.stepRow}>
             <View style={styles.stepNum}><Text style={styles.stepNumText}>{i + 1}</Text></View>
@@ -83,7 +110,7 @@ export const SettingsScreen: React.FC = () => {
 
       <GradientCard style={styles.card}>
         <SectionHeader title="Informazioni App" icon="\u2139\ufe0f" />
-        {[['Versione','1.0.0'],['Framework','React Native + Expo'],['AI Backend','LangGraph + GPT-4'],['Database','5000 alimenti USDA'],['Ricerca','FAISS Vector Search']].map(([k,v]) => (
+        {[['Versione','1.0.0'],['Framework','React Native + Expo'],['AI','Claude (Anthropic)'],['Database','5000 alimenti USDA'],['Ricerca','FAISS Vector Search']].map(([k,v]) => (
           <View key={k} style={styles.infoRow}><Text style={styles.infoLabel}>{k}</Text><Text style={styles.infoValue}>{v}</Text></View>
         ))}
       </GradientCard>
@@ -103,6 +130,10 @@ const styles = StyleSheet.create({
   label:{color:COLORS.textSecondary,fontSize:13,marginBottom:6,marginTop:4},
   input:{backgroundColor:COLORS.surface,borderRadius:10,paddingHorizontal:14,paddingVertical:12,color:COLORS.text,fontSize:14,borderWidth:1,borderColor:COLORS.border,marginBottom:4},
   hint:{color:COLORS.textMuted,fontSize:11,marginBottom:12,lineHeight:17},
+  keyRow:{flexDirection:'row',alignItems:'center',gap:8,marginBottom:4},
+  keyInput:{flex:1,marginBottom:0},
+  eyeBtn:{padding:10},eyeIcon:{fontSize:18},
+  keyOk:{color:COLORS.success,fontSize:12,marginBottom:8},
   btnRow:{flexDirection:'row',gap:10,marginTop:8},
   testBtn:{flex:1,paddingVertical:12,borderRadius:10,borderWidth:1,borderColor:COLORS.primary,alignItems:'center'},
   testBtnText:{color:COLORS.primary,fontWeight:'700',fontSize:13},

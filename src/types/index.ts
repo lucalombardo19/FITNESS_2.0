@@ -125,6 +125,7 @@ export interface VectorSearchResponse {
 export interface AppSettings {
   apiBaseUrl: string;
   userId: string;
+  anthropicApiKey?: string;
 }
 
 export type RootTabParamList = {
