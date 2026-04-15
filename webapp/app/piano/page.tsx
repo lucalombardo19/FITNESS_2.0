@@ -15,11 +15,15 @@ export default function Piano() {
   const [genWorkout, setGenWorkout] = useState(true);
   const [hasProfile, setHasProfile] = useState(false);
   const [hasKey, setHasKey] = useState(false);
+  const [yazioConnected, setYazioConnected] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/user/plan').then(r => r.json()).then(d => { if (d.plan) setPlan(d.plan); });
     fetch('/api/user/profile').then(r => r.json()).then(d => setHasProfile(!!d.profile));
     fetch('/api/user/settings').then(r => r.json()).then(d => setHasKey(!!d.anthropicKey));
+    fetch('/api/yazio/diary').then(r => r.json()).then(d => setYazioConnected(d.connected === true));
   }, []);
 
   const generate = async () => {
@@ -39,6 +43,23 @@ export default function Piano() {
       setError((e as { message?: string })?.message ?? 'Errore sconosciuto');
       setSteps([]);
     } finally { setLoading(false); }
+  };
+
+  const syncToYazio = async () => {
+    if (!plan?.meal_plan) return;
+    setSyncing(true); setSyncResult(null);
+    try {
+      const res = await fetch('/api/yazio/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meal_plan: plan.meal_plan }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Errore sync');
+      setSyncResult(`✅ Sincronizzati ${data.count} pasti su Yazio!`);
+    } catch (e: unknown) {
+      setSyncResult(`❌ ${(e as { message?: string })?.message ?? 'Errore sconosciuto'}`);
+    } finally { setSyncing(false); }
   };
 
   const meal = plan?.meal_plan as MealPlan | undefined;
@@ -113,6 +134,16 @@ export default function Piano() {
                   </div>
                   {meal.meals?.map((m:Meal,i:number) => <MealCard key={i} meal={m} />)}
                   {meal.notes && <div className="card"><p className="text-sub text-sm">💡 {meal.notes}</p></div>}
+                  {yazioConnected && (
+                    <div className="card border-accent/30 bg-accent/5">
+                      <h3 className="font-bold mb-1">🥗 Sincronizza su Yazio</h3>
+                      <p className="text-sub text-xs mb-3">Invia tutti i pasti di oggi al tuo diario Yazio</p>
+                      {syncResult && <p className="text-sm mb-3">{syncResult}</p>}
+                      <button onClick={syncToYazio} disabled={syncing} className="btn-primary w-full">
+                        {syncing ? '⏳ Sincronizzazione...' : '🔄 Sync su Yazio'}
+                      </button>
+                    </div>
+                  )}
                 </>
               ) : <p className="text-sub text-center py-8">Piano alimentare non generato.</p>}
             </div>

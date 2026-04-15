@@ -2,18 +2,23 @@
 import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
-import type { UserProfile, FitnessPlan } from '@/lib/types';
+import type { UserProfile, FitnessPlan, Meal } from '@/lib/types';
 
 export default function Home() {
   const { data: session } = useSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [plan, setPlan] = useState<FitnessPlan | null>(null);
   const [hasKey, setHasKey] = useState(false);
+  const [yazioMeals, setYazioMeals] = useState<Meal[]>([]);
+  const [yazioConnected, setYazioConnected] = useState(false);
 
   useEffect(() => {
     fetch('/api/user/profile').then(r => r.json()).then(d => setProfile(d.profile));
     fetch('/api/user/plan').then(r => r.json()).then(d => setPlan(d.plan));
     fetch('/api/user/settings').then(r => r.json()).then(d => setHasKey(!!d.anthropicKey));
+    fetch('/api/yazio/diary').then(r => r.json()).then(d => {
+      if (d.connected) { setYazioConnected(true); setYazioMeals(d.meals ?? []); }
+    });
   }, []);
 
   const goalLabel: Record<string, string> = {
@@ -101,6 +106,32 @@ export default function Home() {
             <p className="text-muted text-xs mt-3">
               {new Date(plan.timestamp).toLocaleDateString('it-IT', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}
             </p>
+          )}
+        </div>
+      )}
+
+      {/* Yazio diary */}
+      {yazioConnected && (
+        <div className="card border-accent/30 bg-accent/5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="font-bold">🥗 Diario Yazio oggi</h2>
+              <p className="text-muted text-xs mt-0.5">Pasti registrati</p>
+            </div>
+            <Link href="/impostazioni" className="text-accent text-sm font-semibold">Gestisci →</Link>
+          </div>
+          {yazioMeals.length > 0 ? (
+            <div className="space-y-2">
+              {yazioMeals.slice(0, 3).map((m: Meal, i: number) => (
+                <div key={i} className="flex justify-between items-center py-1.5 border-b border-border/50 last:border-0">
+                  <span className="text-sm font-medium">{m.meal_name}</span>
+                  <span className="text-accent text-xs font-semibold">{Math.round(m.total_calories)} kcal</span>
+                </div>
+              ))}
+              {yazioMeals.length > 3 && <p className="text-muted text-xs text-center pt-1">+{yazioMeals.length - 3} altri pasti</p>}
+            </div>
+          ) : (
+            <p className="text-sub text-sm text-center py-3">Nessun pasto registrato oggi</p>
           )}
         </div>
       )}

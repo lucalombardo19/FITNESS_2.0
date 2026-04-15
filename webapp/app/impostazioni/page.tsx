@@ -8,11 +8,41 @@ export default function Impostazioni() {
   const [showUsda, setShowUsda] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Yazio
+  const [yazioUser, setYazioUser] = useState('');
+  const [yazioPass, setYazioPass] = useState('');
+  const [yazioConnected, setYazioConnected] = useState(false);
+  const [yazioLoading, setYazioLoading] = useState(false);
+  const [yazioError, setYazioError] = useState('');
+
   useEffect(() => {
-    fetch('/api/user/settings')
-      .then(r => r.json())
-      .then(d => { setAnthropicKey(d.anthropicKey ?? ''); setUsdaKey(d.usdaKey ?? ''); });
+    fetch('/api/user/settings').then(r => r.json()).then(d => {
+      setAnthropicKey(d.anthropicKey ?? '');
+      setUsdaKey(d.usdaKey ?? '');
+    });
+    fetch('/api/yazio/diary').then(r => r.json()).then(d => setYazioConnected(d.connected === true));
   }, []);
+
+  const connectYazio = async () => {
+    setYazioLoading(true); setYazioError('');
+    try {
+      const res = await fetch('/api/yazio/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: yazioUser, password: yazioPass }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setYazioConnected(true); setYazioUser(''); setYazioPass('');
+    } catch (e: unknown) {
+      setYazioError((e as { message?: string })?.message ?? 'Connessione fallita');
+    } finally { setYazioLoading(false); }
+  };
+
+  const disconnectYazio = async () => {
+    await fetch('/api/yazio/disconnect', { method: 'POST' });
+    setYazioConnected(false);
+  };
 
   const save = async () => {
     await fetch('/api/user/settings', {
@@ -102,6 +132,41 @@ export default function Impostazioni() {
             <span className="font-semibold text-sm">{v}</span>
           </div>
         ))}
+      </div>
+
+      {/* Yazio */}
+      <div className={`card ${yazioConnected ? 'border-accent/40 bg-accent/5' : ''}`}>
+        <h2 className="font-bold text-lg mb-1">🥗 Yazio</h2>
+        <p className="text-sub text-sm mb-4">Sincronizza i piani AI con il tuo diario Yazio</p>
+
+        {yazioConnected ? (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 rounded-full bg-accent" />
+              <p className="text-accent font-semibold text-sm">Account connesso</p>
+            </div>
+            <p className="text-muted text-xs">I piani generati possono essere sincronizzati su Yazio dalla schermata Piano.</p>
+            <button onClick={disconnectYazio} className="w-full border border-danger/50 text-danger text-sm font-semibold py-2.5 rounded-xl hover:bg-danger/10 transition-colors">
+              Disconnetti account Yazio
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="label">Email Yazio</label>
+              <input className="input" type="email" value={yazioUser} onChange={e => setYazioUser(e.target.value)} placeholder="tuaemail@esempio.com" />
+            </div>
+            <div>
+              <label className="label">Password Yazio</label>
+              <input className="input" type="password" value={yazioPass} onChange={e => setYazioPass(e.target.value)} placeholder="••••••••" />
+            </div>
+            {yazioError && <p className="text-danger text-xs">{yazioError}</p>}
+            <p className="text-muted text-xs">Le credenziali vengono usate solo per ottenere un token OAuth2. Non vengono mai salvate.</p>
+            <button onClick={connectYazio} disabled={yazioLoading || !yazioUser || !yazioPass} className="btn-primary w-full">
+              {yazioLoading ? 'Connessione...' : 'Connetti Yazio'}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card border-danger/30">
