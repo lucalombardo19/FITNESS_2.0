@@ -18,6 +18,13 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Non autenticato' }, { status: 401 });
   const { plan } = await req.json();
-  db.prepare('UPDATE user_data SET last_plan = ?, updated_at = datetime("now") WHERE user_id = ?').run(JSON.stringify(plan), userId(session));
+  const uid = userId(session);
+  db.prepare(`
+    INSERT INTO user_data (user_id, last_plan, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(user_id) DO UPDATE SET
+      last_plan  = excluded.last_plan,
+      updated_at = excluded.updated_at
+  `).run(uid, JSON.stringify(plan));
   return NextResponse.json({ ok: true });
 }
