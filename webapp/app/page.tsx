@@ -1,20 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import type { UserProfile, FitnessPlan } from '@/lib/types';
 
 export default function Home() {
+  const { data: session } = useSession();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [plan, setPlan] = useState<FitnessPlan | null>(null);
-  const [apiKey, setApiKey] = useState('');
+  const [hasKey, setHasKey] = useState(false);
 
   useEffect(() => {
-    const p = localStorage.getItem('fitness_profile');
-    const pl = localStorage.getItem('fitness_plan');
-    const k = localStorage.getItem('fitness_api_key');
-    if (p) setProfile(JSON.parse(p));
-    if (pl) setPlan(JSON.parse(pl));
-    if (k) setApiKey(k);
+    fetch('/api/user/profile').then(r => r.json()).then(d => setProfile(d.profile));
+    fetch('/api/user/plan').then(r => r.json()).then(d => setPlan(d.plan));
+    fetch('/api/user/settings').then(r => r.json()).then(d => setHasKey(!!d.anthropicKey));
   }, []);
 
   const goalLabel: Record<string, string> = {
@@ -24,23 +23,23 @@ export default function Home() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-3xl font-extrabold">AI Fitness Planner</h1>
-        <p className="text-sub mt-1">Il tuo piano personalizzato con Claude AI</p>
+        <h1 className="text-3xl font-extrabold">
+          Ciao{session?.user?.name ? `, ${session.user.name}` : ''} 👋
+        </h1>
+        <p className="text-sub mt-1">Il tuo piano fitness con Claude AI</p>
       </div>
 
       {/* Status */}
       <div className="card flex items-center gap-3">
-        <div className={`w-3 h-3 rounded-full ${apiKey ? 'bg-accent' : 'bg-danger'} shadow-lg`} />
+        <div className={`w-3 h-3 rounded-full ${hasKey ? 'bg-accent' : 'bg-danger'}`} />
         <div>
-          <p className="font-semibold text-sm">{apiKey ? 'Claude AI configurato' : 'API Key mancante'}</p>
-          <p className="text-muted text-xs">{apiKey ? 'Pronto a generare piani' : 'Vai su Impostazioni per configurarla'}</p>
+          <p className="font-semibold text-sm">{hasKey ? 'Claude AI configurato' : 'API Key mancante'}</p>
+          <p className="text-muted text-xs">{hasKey ? 'Pronto a generare piani' : 'Vai su Impostazioni'}</p>
         </div>
-        {!apiKey && (
-          <Link href="/impostazioni" className="ml-auto text-primary text-sm font-semibold">Configura →</Link>
-        )}
+        {!hasKey && <Link href="/impostazioni" className="ml-auto text-primary text-sm font-semibold">Configura →</Link>}
       </div>
 
-      {/* Profile summary */}
+      {/* Profile */}
       {profile ? (
         <div className="card">
           <div className="flex items-center justify-between mb-4">
@@ -59,7 +58,7 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex gap-2 flex-wrap">
             <span className="bg-primary/20 text-primary text-xs font-semibold px-3 py-1 rounded-full">
               {goalLabel[profile.fitness_goal] ?? profile.fitness_goal}
             </span>
@@ -72,9 +71,7 @@ export default function Home() {
         <div className="card border-dashed text-center py-8">
           <p className="text-4xl mb-3">👤</p>
           <p className="font-semibold text-sub">Profilo non configurato</p>
-          <Link href="/profilo" className="btn-primary inline-block mt-4 text-sm">
-            Configura profilo
-          </Link>
+          <Link href="/profilo" className="btn-primary inline-block mt-4 text-sm">Configura profilo</Link>
         </div>
       )}
 
@@ -88,11 +85,11 @@ export default function Home() {
         <Link href="/cerca" className="card hover:border-accent transition-colors text-center py-6">
           <p className="text-3xl mb-2">🔍</p>
           <p className="font-bold">Cerca Alimenti</p>
-          <p className="text-muted text-xs mt-1">Database nutrizionale AI</p>
+          <p className="text-muted text-xs mt-1">Database USDA certificato</p>
         </Link>
       </div>
 
-      {/* Last plan summary */}
+      {/* Last plan */}
       {plan?.summary && (
         <div className="card border-primary/30 bg-primary/5">
           <div className="flex items-center justify-between mb-2">
