@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
     const { genMeal, genWorkout } = body;
     const dietPrefs: DietPrefs = body.dietPrefs ?? { mealsPerDay: 4, planDays: 3, kcalMode: 'auto' };
     const workoutPrefs: WorkoutPrefs = body.workoutPrefs ?? { restSeconds: 90, sessionMinutes: 60, intensity: 'moderate' };
+    const dietNotes: string = body.dietNotes ?? '';
+    const workoutNotes: string = body.workoutNotes ?? '';
 
     // Load recent workout history for progressive overload
     const workoutHistory = db.prepare(`
@@ -83,7 +85,7 @@ PARAMETRI OBBLIGATORI:
 - Proteine: ${protG}g | Carboidrati: ${carbG}g | Grassi: ${fatG}g
 - Obiettivo: ${profile.fitness_goal}
 - Allergie: ${(profile.allergies ?? []).join(', ') || 'nessuna'}
-- Preferenze: ${(profile.dietary_preferences ?? []).join(', ') || 'nessuna'}
+- Preferenze: ${(profile.dietary_preferences ?? []).join(', ') || 'nessuna'}${dietNotes ? `\n- RICHIESTE SPECIFICHE UTENTE (priorità massima): ${dietNotes}` : ''}
 
 REGOLE FERREE:
 1. Ogni giorno ha ESATTAMENTE ${dietPrefs.mealsPerDay} pasti
@@ -161,7 +163,7 @@ PARAMETRI:
 - Intensità: ${workoutPrefs.intensity}
 - Obiettivo: ${profile.fitness_goal}
 - Attrezzatura: ${(profile.available_equipment ?? ['bodyweight']).join(', ')}
-- Peso corporeo: ${profile.weight_kg}kg${historyStr}
+- Peso corporeo: ${profile.weight_kg}kg${workoutNotes ? `\n- RICHIESTE SPECIFICHE UTENTE (priorità massima): ${workoutNotes}` : ''}${historyStr}
 
 REGOLE:
 1. Crea ESATTAMENTE ${profile.weekly_workout_frequency} sessioni

@@ -19,12 +19,14 @@ export default function Piano() {
   const [kcalMode, setKcalMode] = useState<KcalMode>('auto');
   const [targetKcal, setTargetKcal] = useState(2000);
   const [kcalAdjustment, setKcalAdjustment] = useState(500);
+  const [dietNotes, setDietNotes] = useState('');
 
   // Workout prefs
   const [genWorkout, setGenWorkout] = useState(true);
   const [restSeconds, setRestSeconds] = useState(90);
   const [sessionMinutes, setSessionMinutes] = useState(60);
   const [intensity, setIntensity] = useState<'light' | 'moderate' | 'intense'>('moderate');
+  const [workoutNotes, setWorkoutNotes] = useState('');
 
   useEffect(() => {
     fetch('/api/user/profile').then(r => r.json()).then(d => setHasProfile(!!d.profile));
@@ -42,6 +44,8 @@ export default function Piano() {
           genMeal, genWorkout,
           dietPrefs: { mealsPerDay, planDays, kcalMode, targetKcal: kcalMode === 'manual' ? targetKcal : undefined, kcalAdjustment },
           workoutPrefs: { restSeconds, sessionMinutes, intensity },
+          dietNotes: dietNotes.trim() || undefined,
+          workoutNotes: workoutNotes.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -130,6 +134,14 @@ export default function Piano() {
                 </div>
               </Row>
             )}
+            <Row label="✍️ Richieste specifiche (opzionale)">
+              <textarea
+                className="input resize-none text-sm min-h-[72px]"
+                placeholder={'Es: "Voglio colazioni veloci, no latticini a pranzo, preferisco pasta a riso, includi almeno un pasto con salmone"'}
+                value={dietNotes}
+                onChange={e => setDietNotes(e.target.value)}
+              />
+            </Row>
           </div>
         )}
       </div>
@@ -157,6 +169,14 @@ export default function Piano() {
                 options={['light','moderate','intense'] as typeof intensity[]}
                 value={intensity} onChange={setIntensity}
                 format={v => v === 'light' ? '🟢 Leggera' : v === 'moderate' ? '🟡 Moderata' : '🔴 Intensa'}
+              />
+            </Row>
+            <Row label="✍️ Richieste specifiche (opzionale)">
+              <textarea
+                className="input resize-none text-sm min-h-[72px]"
+                placeholder={'Es: "No squat per problemi al ginocchio, voglio più esercizi per le spalle, includi stretching finale, preferisco i superset"'}
+                value={workoutNotes}
+                onChange={e => setWorkoutNotes(e.target.value)}
               />
             </Row>
           </div>
