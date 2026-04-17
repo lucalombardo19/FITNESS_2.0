@@ -5,7 +5,9 @@ import db from '@/lib/db';
 import Anthropic from '@anthropic-ai/sdk';
 import type { DietPrefs, WorkoutPrefs, ExerciseLog } from '@/lib/types';
 
-const MODEL = 'claude-sonnet-4-6';
+export const maxDuration = 120;
+
+const MODEL = 'claude-opus-4-7';
 
 function extract(text: string): Record<string, unknown> | null {
   const m = text.match(/\{[\s\S]*\}/);
@@ -22,7 +24,6 @@ function calcKcal(profile: Record<string, number>, dietPrefs: DietPrefs, tdee: n
   if (dietPrefs.kcalMode === 'manual' && dietPrefs.targetKcal) return dietPrefs.targetKcal;
   if (dietPrefs.kcalMode === 'deficit') return Math.max(1200, tdee - (dietPrefs.kcalAdjustment ?? 500));
   if (dietPrefs.kcalMode === 'surplus') return tdee + (dietPrefs.kcalAdjustment ?? 300);
-  // auto: based on goal
   if (profile.fitness_goal === 'cut') return Math.max(1200, tdee - 400);
   if (profile.fitness_goal === 'bulk') return tdee + 300;
   return tdee;
@@ -47,7 +48,6 @@ export async function POST(req: NextRequest) {
     const dietNotes: string = body.dietNotes ?? '';
     const workoutNotes: string = body.workoutNotes ?? '';
 
-    // Load recent workout history for progressive overload
     const workoutHistory = db.prepare(`
       SELECT exercise_name, session_focus, date, sets_json FROM workout_log
       WHERE user_id = ? ORDER BY date DESC LIMIT 30
@@ -59,7 +59,11 @@ export async function POST(req: NextRequest) {
       sets: JSON.parse(r.sets_json),
     }));
 
-    const client = new Anthropic({ apiKey: anthropicKey });
+    const client = new Anthropic({
+      apiKey: anthropicKey,
+      timeout: 60_000,
+      maxRetries: 1,
+    });
     const steps: string[] = [];
 
     // ── Step 1: Calculate targets ─────────────────────────────────────────────
@@ -72,11 +76,8 @@ export async function POST(req: NextRequest) {
     const fatG = Math.round((targetKcal * 0.25) / 9);
     const carbG = Math.round((targetKcal - protG * 4 - fatG * 9) / 4);
 
-    // ── Step 2: Meal Plan ─────────────────────────────────────────────────────
-    let mealPlan = null;
-    if (genMeal) {
-      steps.push(`✅ Meal Planner: piano ${dietPrefs.planDays} giorni × ${dietPrefs.mealsPerDay} pasti generato`);
-      const mealPrompt = `Sei un nutrizionista professionista italiano. Crea un piano alimentare DETTAGLIATO e VARIO.
+    // ── Step 2 & 3: Meal + Workout in parallelo ───────────────────────────────
+    const mealPrompt = `Sei un nutrizionista professionista italiano. Crea un piano alimentare DETTAGLIATO e VARIO.
 
 PARAMETRI OBBLIGATORI:
 - Giorni: ${dietPrefs.planDays}
@@ -143,18 +144,12 @@ Rispondi SOLO con JSON valido (niente testo prima o dopo):
   "total_fat_g": ${fatG},
   "notes": "consigli brevi"
 }`;
-      mealPlan = extract(await call(client, mealPrompt, 8000));
-    }
 
-    // ── Step 3: Workout Plan ──────────────────────────────────────────────────
-    let workoutPlan = null;
-    if (genWorkout) {
-      steps.push('✅ Workout Planner: routine personalizzata generata');
-      const historyStr = recentLogs.length > 0
-        ? `\nSTORICO ALLENAMENTI RECENTI (usa per progressive overload):\n${JSON.stringify(recentLogs.slice(0, 15), null, 2)}`
-        : '\nNessuno storico — crea piano di partenza adatto al livello.';
+    const historyStr = recentLogs.length > 0
+      ? `\nSTORICO ALLENAMENTI RECENTI (usa per progressive overload):\n${JSON.stringify(recentLogs.slice(0, 15), null, 2)}`
+      : '\nNessuno storico — crea piano di partenza adatto al livello.';
 
-      const workoutPrompt = `Sei un personal trainer esperto. Crea un programma di allenamento DETTAGLIATO e PROGRESSIVO.
+    const workoutPrompt = `Sei un personal trainer esperto. Crea un programma di allenamento DETTAGLIATO e PROGRESSIVO.
 
 PARAMETRI:
 - Sessioni/settimana: ${profile.weekly_workout_frequency}
@@ -203,8 +198,20 @@ Rispondi SOLO con JSON (niente testo prima o dopo):
   "progression_notes": "come aumentare carichi progressivamente",
   "notes": "consigli generali"
 }`;
-      workoutPlan = extract(await call(client, workoutPrompt, 6000));
-    }
+
+    const [mealResult, workoutResult] = await Promise.allSettled([
+      genMeal    ? call(client, mealPrompt, 8000)    : Promise.resolve(null),
+      genWorkout ? call(client, workoutPrompt, 6000) : Promise.resolve(null),
+    ]);
+
+    if (mealResult.status === 'rejected')    throw mealResult.reason;
+    if (workoutResult.status === 'rejected') throw workoutResult.reason;
+
+    const mealPlan    = mealResult.value    ? extract(mealResult.value)    : null;
+    const workoutPlan = workoutResult.value ? extract(workoutResult.value) : null;
+
+    if (genMeal)    steps.push(`✅ Meal Planner: piano ${dietPrefs.planDays} giorni × ${dietPrefs.mealsPerDay} pasti generato`);
+    if (genWorkout) steps.push('✅ Workout Planner: routine personalizzata generata');
 
     // ── Step 4: Summary ───────────────────────────────────────────────────────
     steps.push('✅ Summary Agent: riepilogo finalizzato');
@@ -230,9 +237,16 @@ Rispondi SOLO con JSON (niente testo prima o dopo):
     `).run(uid, JSON.stringify(plan));
 
     return NextResponse.json(plan);
-  } catch (e: unknown) {
-    const err = e as { status?: number; message?: string };
-    if (err?.status === 401) return NextResponse.json({ error: 'API key Anthropic non valida' }, { status: 401 });
-    return NextResponse.json({ error: err?.message ?? 'Errore interno' }, { status: 500 });
+  } catch (e) {
+    if (e instanceof Anthropic.AuthenticationError)
+      return NextResponse.json({ error: 'API key Anthropic non valida' }, { status: 401 });
+    if (e instanceof Anthropic.APIConnectionError)
+      return NextResponse.json({ error: 'Impossibile connettersi ad Anthropic. Verifica la connessione e riprova.' }, { status: 503 });
+    if (e instanceof Anthropic.RateLimitError)
+      return NextResponse.json({ error: 'Limite richieste Anthropic raggiunto. Riprova tra qualche secondo.' }, { status: 429 });
+    if (e instanceof Anthropic.APIError)
+      return NextResponse.json({ error: `Errore Anthropic (${e.status}): ${e.message}` }, { status: 502 });
+    const msg = e instanceof Error ? e.message : 'Errore interno';
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
