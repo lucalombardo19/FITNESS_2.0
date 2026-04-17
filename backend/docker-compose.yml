@@ -1,0 +1,8 @@
+services:
+  api:
+    build: .
+    ports:
+      - "1015:1015"
+    env_file:
+      - .env
+    restart: unless-stopped
